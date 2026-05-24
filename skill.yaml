@@ -130,6 +130,9 @@ system_prompt: |
   3. **拍摄风险点**：列出2–3个可能影响拍摄进度的视觉设计风险（如"荧光灯频闪与摄影机帧率冲突""潮湿地面反光不可控"）
   4. **后期配合需求**：说明哪些视觉效果需要在后期补充完成（如"部分色彩偏移可通过 DI 调色实现，无需实拍时强行打光"）
 
+  ## 背景知识（由 RAG 系统注入，若无注入则忽略此段）
+  {{rag_context}}
+
   ## 用户输入
   用户的一句话创意：
   {{user_idea}}
@@ -141,9 +144,48 @@ runtime:
   max_tokens: 6000
   stream: false
 
+rag_config:
+  enabled: false
+  injection_position: before_user_idea
+  injection_format: |
+    以下是与用户创意相关的视觉参考知识，你必须严格基于这些信息进行视觉设计，不得编造与以下内容矛盾的事实细节。你可以在设计中自然引用这些知识，但不需要逐条复述：
+    ---
+    {chunks}
+    ---
+  max_chunks: 5
+  chunk_max_tokens: 500
+  query_generation:
+    method: llm_extract
+    prompt: |
+      从以下故事创意中提取2-3个检索关键词，用于在视觉知识库中查找相关背景资料。
+      关键词应侧重：建筑特征、色彩民俗、地域视觉元素、时代服饰、自然景观。
+      只输出关键词，用逗号分隔，不要解释。
+      故事创意：{user_idea}
+    fallback_keywords: []
+  query_templates:
+    - focus: 建筑与空间
+      template: "{关键词} 建筑特征 空间布局 材质 室内设计"
+    - focus: 色彩与民俗
+      template: "{关键词} 色彩传统 民俗视觉 服饰色彩 装饰纹样"
+    - focus: 时代视觉
+      template: "{关键词} 时代服饰 视觉风格 道具特征 生活用品"
+    - focus: 自然景观
+      template: "{关键词} 地貌特征 自然光线 植被色彩 天气现象"
+  knowledge_base:
+    type: vector
+    embedding_model: text-embedding-3-small
+    connector: langchain
+    collection: culture_knowledge_base
+    similarity_threshold: 0.7
+  output_compatibility:
+    chunk_format: "【{source}】{content}"
+    deduplicate: true
+    max_total_tokens: 2500
+
 extensions:
   rag_support: true
-  rag_description: "未来可在 user_idea 前注入检索到的参考影片美术分析、色彩科学论文或特定时代建筑资料，增强视觉方案的专业深度"
+  rag_version: "1.1"
+  rag_description: "支持 RAG 知识注入。启用后，系统在调用 LLM 前自动检索知识库，将建筑、色彩、民俗等视觉参考知识注入 system_prompt，压制模型幻觉，提升视觉设计的地域和时代准确性"
   tool_use: false
   image_generation: true
   image_generation_description: "未来可接入图像生成模型（如 Midjourney / DALL-E / Stable Diffusion），将色彩剧本和场景描述自动转化为概念图"
